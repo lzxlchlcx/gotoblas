@@ -12,6 +12,7 @@
 | `04-kernel-layer.md` | 内核层（kernel/） |
 | `05-data-structures.md` | 核心数据结构 |
 | `06-gemm-parameters.md` | GEMM 阻塞参数 |
+| `07-dgemm-flow.md` | DGEMM 调用流程详解 |
 
 ## 源码目录结构
 

@@ -1,5 +1,75 @@
 # 02 - 公共接口层 (interface/)
 
+## GEMM 参数语义
+
+### 核心公式
+
+```
+C = alpha · op(A) · op(B) + beta · C
+
+op(X) = X      (若 trans = 'N')
+op(X) = Xᵀ     (若 trans = 'T')
+```
+
+### 维度参数
+
+| 参数 | 含义 |
+|------|------|
+| `m` | `op(A)` 的行数，也是 C 的行数 |
+| `n` | `op(B)` 的列数，也是 C 的列数 |
+| `k` | `op(A)` 的列数，也是 `op(B)` 的行数（内积维度） |
+
+因此 A 和 B 的物理形状取决于 trans 标志：
+
+```
+transa='N': A 是 m×k,  op(A) = A  (m×k)
+transa='T': A 是 k×m,  op(A) = Aᵀ (m×k)
+
+transb='N': B 是 k×n,  op(B) = B  (k×n)
+transb='T': B 是 n×k,  op(B) = Bᵀ (k×n)
+```
+
+### Leading Dimension (lda, ldb, ldc)
+
+BLAS 规定矩阵按**列优先 (column-major)** 存储。矩阵 X 的元素 `X(i,j)` 位于地址 `X + i + j * ldX`（第 j 列第 i 行）。
+
+`ldX` 是 X 的 leading dimension，即同一列中相邻行元素之间的步长（以元素数为单位）。`ldX` 必须 ≥ op(X) 的行数。
+
+lda、ldb、ldc 与维度的关系：
+
+```
+         op(A) 的行数    op(A) 的列数    lda ≥
+transa='N'     m              k           m
+transa='T'     m              k           k  (A 物理上是 k×m)
+
+         op(B) 的行数    op(B) 的列数    ldb ≥
+transb='N'     k              n           k
+transb='T'     k              n           n  (B 物理上是 n×k)
+
+         C 的行数    C 的列数    ldc ≥
+           m           n          m
+```
+
+`ldX` 可以大于所需行数，因为输入矩阵可能是某个更大矩阵的列优先子块——`ldX` 就是外层矩阵的列跨度，子块通过偏移指针 + lda 步长来定位。
+
+### 参数概览
+
+| 参数 | 含义 |
+|------|------|
+| `transa` | `'N'`=不转置，`'T'`=转置 |
+| `transb` | `'N'`=不转置，`'T'`=转置 |
+| `m` | `op(A)` 行数 / C 行数 |
+| `n` | `op(B)` 列数 / C 列数 |
+| `k` | `op(A)` 列数 / `op(B)` 行数 |
+| `alpha` | 标量系数 α |
+| `A` | 矩阵 A 指针 |
+| `lda` | A 的 leading dimension（≥ op(A) 行数） |
+| `B` | 矩阵 B 指针 |
+| `ldb` | B 的 leading dimension（≥ op(B) 行数） |
+| `beta` | 标量系数 β |
+| `C` | 矩阵 C 指针 |
+| `ldc` | C 的 leading dimension（≥ m） |
+
 ## 文件组织
 
 每个 BLAS 函数在 `interface/` 下有独立的 `.c` 文件：
