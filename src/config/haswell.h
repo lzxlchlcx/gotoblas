@@ -10,7 +10,7 @@
 #define GEMM_HASWELL_D_Q  256
 #define GEMM_HASWELL_D_R  4096
 #define GEMM_HASWELL_D_MR 4
-#define GEMM_HASWELL_D_NR 4
+#define GEMM_HASWELL_D_NR 8
 
 #define GEMM_HASWELL_S_P  256
 #define GEMM_HASWELL_S_Q  256
