@@ -1,0 +1,18 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+
+# Test binaries
+test/test_gemm
+test/bench_gemm
+
+# OpenBLAS reference (not our code)
+OpenBLAS/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
