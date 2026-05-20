@@ -5,15 +5,34 @@ AR      = ar
 
 SRCS_API    = src/api/dgemm.c src/api/sgemm.c
 SRCS_DRIVER = src/driver/gemm_driver.c src/driver/gemm_thread.c
-SRCS_KERNEL = src/kernel/generic/dgemm_kernel.c \
+SRCS_KERNEL_GENERIC = src/kernel/generic/dgemm_kernel.c \
               src/kernel/generic/sgemm_kernel.c \
               src/kernel/generic/dgemm_pack.c \
               src/kernel/generic/sgemm_pack.c \
               src/kernel/generic/dgemm_beta.c \
               src/kernel/generic/sgemm_beta.c \
               src/kernel/generic/kernel_init.c
-SRCS = $(SRCS_API) $(SRCS_DRIVER) $(SRCS_KERNEL)
+
+# AVX2 sources (compiled with -mavx2 -mfma)
+SRCS_AVX2   = src/kernel/avx2/dgemm_kernel.c \
+              src/kernel/avx2/sgemm_kernel.c \
+              src/kernel/avx2/dgemm_pack.c \
+              src/kernel/avx2/sgemm_pack.c \
+              src/kernel/avx2/dgemm_beta.c \
+              src/kernel/avx2/sgemm_beta.c \
+              src/kernel/avx2/kernel_init.c \
+              src/kernel/avx2/cpuid.c
+
+SRCS = $(SRCS_API) $(SRCS_DRIVER) $(SRCS_KERNEL_GENERIC)
 OBJS = $(SRCS:.c=.o)
+
+# Check if compiler supports AVX2
+HAS_AVX2 := $(shell echo 'int main(){}' | $(CC) -mavx2 -mfma -x c - -o /dev/null 2>/dev/null && echo yes || echo no)
+
+ifeq ($(HAS_AVX2),yes)
+  CFLAGS += -D__AVX2__
+  OBJS += $(SRCS_AVX2:.c=.o)
+endif
 
 LIB     = libmyblas.a
 TEST    = test/test_gemm
@@ -31,6 +50,10 @@ $(LIB): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+# AVX2 objects need -mavx2 -mfma flags
+src/kernel/avx2/%.o: src/kernel/avx2/%.c
+	$(CC) $(CFLAGS) -mavx2 -mfma -c -o $@ $<
+
 test: $(TEST)
 	./$(TEST)
 
@@ -44,4 +67,4 @@ $(BENCH): test/bench_gemm.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
 
 clean:
-	rm -f $(OBJS) $(LIB) $(TEST) $(BENCH)
+	rm -f $(OBJS) $(SRCS_AVX2:.c=.o) $(LIB) $(TEST) $(BENCH)

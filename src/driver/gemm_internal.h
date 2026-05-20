@@ -61,6 +61,11 @@ typedef struct {
 extern gemm_kernel_table_t  gemm_kernel_generic_double;
 extern sgemm_kernel_table_t gemm_kernel_generic_float;
 
+#ifdef __AVX2__
+extern gemm_kernel_table_t  gemm_kernel_avx2_double;
+extern sgemm_kernel_table_t gemm_kernel_avx2_float;
+#endif
+
 void gemm_driver_double(const gemm_arg_t *arg, const gemm_config_t *cfg,
                         const gemm_kernel_table_t *kernels,
                         double *sa, double *sb);

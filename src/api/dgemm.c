@@ -5,6 +5,11 @@
 #include "driver/gemm_internal.h"
 #include "config/generic.h"
 
+#ifdef __AVX2__
+#include "config/haswell.h"
+extern int cpu_supports_avx2(void);
+#endif
+
 void my_dgemm(char transa, char transb,
               int m, int n, int k,
               double alpha, const double *A, int lda,
@@ -56,7 +61,26 @@ void my_dgemm(char transa, char transb,
     }
 
     gemm_config_t cfg;
+    const gemm_kernel_table_t *kernels;
+
+#ifdef __AVX2__
+    static int avx2_checked = 0;
+    static int has_avx2 = 0;
+    if (!avx2_checked) {
+        has_avx2 = cpu_supports_avx2();
+        avx2_checked = 1;
+    }
+    if (has_avx2) {
+        gemm_config_avx2_double(&cfg);
+        kernels = &gemm_kernel_avx2_double;
+    } else {
+        gemm_config_generic_double(&cfg);
+        kernels = &gemm_kernel_generic_double;
+    }
+#else
     gemm_config_generic_double(&cfg);
+    kernels = &gemm_kernel_generic_double;
+#endif
 
     size_t sa_size = (size_t)cfg.P * cfg.Q * sizeof(double) + 4096;
     size_t sb_size = (size_t)cfg.Q * cfg.R * sizeof(double) + 4096;
@@ -88,9 +112,9 @@ void my_dgemm(char transa, char transb,
     }
 
     if (arg.nthreads > 1 && (double)m * n * k > 65536.0) {
-        gemm_parallel_double(&arg, &cfg, &gemm_kernel_generic_double);
+        gemm_parallel_double(&arg, &cfg, kernels);
     } else {
-        gemm_driver_double(&arg, &cfg, &gemm_kernel_generic_double, sa, sb);
+        gemm_driver_double(&arg, &cfg, kernels, sa, sb);
     }
 
     free(sa);
