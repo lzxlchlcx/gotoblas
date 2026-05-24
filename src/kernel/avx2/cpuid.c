@@ -8,7 +8,7 @@ int cpu_supports_avx2(void)
 {
 #ifdef __GNUC__
     unsigned int eax, ebx, ecx, edx;
-    if (__get_cpuid(7, &eax, &ebx, &ecx, &edx)) {
+    if (__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) {
         int has_avx2 = (ebx & (1 << 5)) != 0;
         __get_cpuid(1, &eax, &ebx, &ecx, &edx);
         int has_fma = (ecx & (1 << 12)) != 0;

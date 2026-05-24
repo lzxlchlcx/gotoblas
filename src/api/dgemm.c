@@ -4,6 +4,7 @@
 #include "myblas.h"
 #include "driver/gemm_internal.h"
 #include "config/generic.h"
+#include "util/myblas_log.h"
 
 #ifdef __AVX2__
 #include "config/haswell.h"
@@ -59,6 +60,8 @@ void my_dgemm(char transa, char transb,
         }
         return;
     }
+
+    MYBLAS_LOG_TIMER_START(log_t0);
 
     gemm_config_t cfg;
     const gemm_kernel_table_t *kernels;
@@ -116,6 +119,8 @@ void my_dgemm(char transa, char transb,
     } else {
         gemm_driver_double(&arg, &cfg, kernels, sa, sb);
     }
+
+    MYBLAS_LOG_RECORD_CALL_ELAPSED(m, n, k, ta, tb, log_t0);
 
     free(sa);
     free(sb);

@@ -4,6 +4,7 @@
 #include <time.h>
 #include "myblas.h"
 #include <cblas.h>
+#include <openblas_config.h>
 
 static double get_time(void)
 {
@@ -67,21 +68,21 @@ int main(void)
     int nsizes = sizeof(sizes) / sizeof(sizes[0]);
 
     printf("=== MyBLAS vs OpenBLAS Comparison ===\n");
+    // TODO: Detect CPU model programmatically
     printf("CPU: Apple M5\n\n");
 
     for (int t = 1; t <= 4; t *= 4) {
         myblas_set_num_threads(t);
 
-        char envbuf[64];
-        snprintf(envbuf, sizeof(envbuf), "%d", t);
-        setenv("OPENBLAS_NUM_THREADS", envbuf, 1);
+        openblas_set_num_threads(t);
 
         printf("--- %d thread(s) ---\n", t);
         printf("%10s  %12s  %12s  %6s\n",
-               "Size", "MyBLAS", "OpenBLAS", "Speedup");
+               "Size", "MyBLAS", "OpenBLAS", "Speedup");            
         printf("%10s  %12s  %12s  %6s\n",
                "", "(GFLOPS)", "(GFLOPS)", "");
 
+        myblas_log_reset();
         for (int i = 0; i < nsizes; i++) {
             int n = sizes[i];
             int niter = 5;
@@ -95,9 +96,13 @@ int main(void)
 
             printf("%10d  %12.2f  %12.2f  %5.1fx\n",
                    n, gflops_m, gflops_o, speedup);
+
         }
+        myblas_log_print();
         printf("\n");
     }
+
+
 
     return 0;
 }

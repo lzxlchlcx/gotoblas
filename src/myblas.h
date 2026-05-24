@@ -20,6 +20,12 @@ void my_sgemm(char transa, char transb,
 void myblas_set_num_threads(int num_threads);
 int  myblas_get_num_threads(void);
 
+#ifdef MYBLAS_ENABLE_LOG
+void myblas_log_reset(void);
+void myblas_log_print(void);
+void myblas_log_enable(int enable);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

@@ -13,6 +13,7 @@
 | `05-data-structures.md` | 核心数据结构 |
 | `06-gemm-parameters.md` | GEMM 阻塞参数 |
 | `07-dgemm-flow.md` | DGEMM 调用流程详解 |
+| `08-myblas-blocking-tutorial.md` | MyBLAS 分块算法新手教学 |
 
 ## 源码目录结构
 

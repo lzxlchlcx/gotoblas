@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -O2 -Wall -Iinclude -Isrc
+CFLAGS  = -O2 -Wall -Isrc
 LDFLAGS = -lpthread
 AR      = ar
 
@@ -24,7 +24,12 @@ SRCS_AVX2   = src/kernel/avx2/dgemm_kernel.c \
               src/kernel/avx2/cpuid.c
 
 SRCS = $(SRCS_API) $(SRCS_DRIVER) $(SRCS_KERNEL_GENERIC)
-OBJS = $(SRCS:.c=.o)
+SRCS_UTIL = src/util/myblas_log.c
+OBJS = $(SRCS:.c=.o) $(SRCS_UTIL:.c=.o)
+
+ifdef LOG
+  CFLAGS += -DMYBLAS_ENABLE_LOG
+endif
 
 # Check if compiler supports AVX2
 HAS_AVX2 := $(shell echo 'int main(){}' | $(CC) -mavx2 -mfma -x c - -o /dev/null 2>/dev/null && echo yes || echo no)
@@ -37,6 +42,7 @@ endif
 LIB     = libmyblas.a
 TEST    = test/test_gemm
 BENCH   = test/bench_gemm
+COMPARE = test/bench_compare
 
 .PHONY: all lib test bench clean
 
@@ -60,11 +66,20 @@ test: $(TEST)
 bench: $(BENCH)
 	./$(BENCH)
 
+compare: $(COMPARE)
+	./$(COMPARE)
+
 $(TEST): test/test_gemm.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
 
 $(BENCH): test/bench_gemm.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
 
+OPENBLAS_INC = /home/lzx/miniconda3/envs/main/include
+OPENBLAS_LIB = /home/lzx/miniconda3/envs/main/lib
+
+$(COMPARE): test/bench_compare.c $(LIB)
+	$(CC) $(CFLAGS) -DMYBLAS_ENABLE_LOG -I$(OPENBLAS_INC) -o $@ $< -L. -L$(OPENBLAS_LIB) -lmyblas -lopenblas $(LDFLAGS) -lm
+
 clean:
-	rm -f $(OBJS) $(SRCS_AVX2:.c=.o) $(LIB) $(TEST) $(BENCH)
+	rm -f $(OBJS) $(SRCS_AVX2:.c=.o) $(LIB) $(TEST) $(BENCH) $(COMPARE)

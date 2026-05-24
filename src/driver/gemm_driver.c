@@ -1,5 +1,6 @@
 #include <string.h>
 #include "driver/gemm_internal.h"
+#include "util/myblas_log.h"
 
 void gemm_driver_double(const gemm_arg_t *arg, const gemm_config_t *cfg,
                         const gemm_kernel_table_t *kernels,
@@ -13,14 +14,14 @@ void gemm_driver_double(const gemm_arg_t *arg, const gemm_config_t *cfg,
     double *C = (double *)arg->C;
     int transa = arg->transa, transb = arg->transb;
 
-    int P = cfg->P, Q = cfg->Q, R = cfg->R;   // 外层块大小: M, K, N 维度
-    int MR = cfg->MR, NR = cfg->NR;           // 微块大小: M, N 维度
+    int P = cfg->P, Q = cfg->Q, R = cfg->R;
+    int MR = cfg->MR, NR = cfg->NR;
 
     pack_func pack_a = (transa == 0) ? kernels->pack_a_nn : kernels->pack_a_tn;
     pack_func pack_b = (transb == 0) ? kernels->pack_b_nn : kernels->pack_b_tn;
 
-    int col0, k0, row0;       // 外层块起始索引: N, K, M 维度
-    int col_rem, k_rem, row_rem; // 当前块末尾剩余量
+    int col0, k0, row0;
+    int col_rem, k_rem, row_rem;
 
     for (col0 = 0; col0 < n; col0 += R) {
         col_rem = n - col0;
@@ -36,12 +37,14 @@ void gemm_driver_double(const gemm_arg_t *arg, const gemm_config_t *cfg,
                 col1_rem = (col0 + col_rem) - col1;
                 if (col1_rem > NR) col1_rem = NR;
 
+                MYBLAS_LOG_TIMER_START(_log_pack_b);
                 if (transb == 0)
                     pack_b(k_rem, col1_rem, &B[k0 + col1 * ldb], ldb,
                            sb + k_rem * (col1 - col0));
                 else
                     pack_b(k_rem, col1_rem, &B[col1 + k0 * ldb], ldb,
                            sb + k_rem * (col1 - col0));
+                MYBLAS_LOG_TIMER_END(_log_pack_b, "pack_b");
 
                 for (row0 = 0; row0 < m; row0 += P) {
                     row_rem = m - row0;
@@ -53,16 +56,20 @@ void gemm_driver_double(const gemm_arg_t *arg, const gemm_config_t *cfg,
                         row1_rem = (row0 + row_rem) - row1;
                         if (row1_rem > MR) row1_rem = MR;
 
+                        MYBLAS_LOG_TIMER_START(_log_pack_a);
                         if (transa == 0)
                             pack_a(row1_rem, k_rem, &A[row1 + k0 * lda], lda, sa);
                         else
                             pack_a(row1_rem, k_rem, &A[k0 + row1 * lda], lda, sa);
+                        MYBLAS_LOG_TIMER_END(_log_pack_a, "pack_a");
 
+                        MYBLAS_LOG_TIMER_START(_log_kernel);
                         kernels->kernel(row1_rem, col1_rem, k_rem,
                                         alpha,
                                         sa,
                                         sb + k_rem * (col1 - col0),
                                         &C[row1 + col1 * ldc], ldc);
+                        MYBLAS_LOG_TIMER_END(_log_kernel, "kernel");
                     }
                 }
             }
