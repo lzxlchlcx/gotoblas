@@ -45,23 +45,28 @@ void gemm_driver_double(const gemm_arg_t *arg, const gemm_config_t *cfg,
                     pack_b(k_rem, col1_rem, &B[col1 + k0 * ldb], ldb,
                            sb + k_rem * (col1 - col0));
                 MYBLAS_LOG_TIMER_END(_log_pack_b, "pack_b");
+            }
 
-                for (row0 = 0; row0 < m; row0 += P) {
-                    row_rem = m - row0;
-                    if (row_rem > P) row_rem = P;
+            for (row0 = 0; row0 < m; row0 += P) {
+                row_rem = m - row0;
+                if (row_rem > P) row_rem = P;
 
-                    int row1_rem;
-                    int row1;
-                    for (row1 = row0; row1 < row0 + row_rem; row1 += row1_rem) {
-                        row1_rem = (row0 + row_rem) - row1;
-                        if (row1_rem > MR) row1_rem = MR;
+                int row1_rem;
+                int row1;
+                for (row1 = row0; row1 < row0 + row_rem; row1 += row1_rem) {
+                    row1_rem = (row0 + row_rem) - row1;
+                    if (row1_rem > MR) row1_rem = MR;
 
-                        MYBLAS_LOG_TIMER_START(_log_pack_a);
-                        if (transa == 0)
-                            pack_a(row1_rem, k_rem, &A[row1 + k0 * lda], lda, sa);
-                        else
-                            pack_a(row1_rem, k_rem, &A[k0 + row1 * lda], lda, sa);
-                        MYBLAS_LOG_TIMER_END(_log_pack_a, "pack_a");
+                    MYBLAS_LOG_TIMER_START(_log_pack_a);
+                    if (transa == 0)
+                        pack_a(row1_rem, k_rem, &A[row1 + k0 * lda], lda, sa);
+                    else
+                        pack_a(row1_rem, k_rem, &A[k0 + row1 * lda], lda, sa);
+                    MYBLAS_LOG_TIMER_END(_log_pack_a, "pack_a");
+
+                    for (col1 = col0; col1 < col0 + col_rem; col1 += col1_rem) {
+                        col1_rem = (col0 + col_rem) - col1;
+                        if (col1_rem > NR) col1_rem = NR;
 
                         MYBLAS_LOG_TIMER_START(_log_kernel);
                         kernels->kernel(row1_rem, col1_rem, k_rem,
@@ -118,21 +123,26 @@ void gemm_driver_float(const gemm_arg_t *arg, const gemm_config_t *cfg,
                 else
                     pack_b(k_rem, col1_rem, &B[col1 + k0 * ldb], ldb,
                            sb + k_rem * (col1 - col0));
+            }
 
-                for (row0 = 0; row0 < m; row0 += P) {
-                    row_rem = m - row0;
-                    if (row_rem > P) row_rem = P;
+            for (row0 = 0; row0 < m; row0 += P) {
+                row_rem = m - row0;
+                if (row_rem > P) row_rem = P;
 
-                    int row1_rem;
-                    int row1;
-                    for (row1 = row0; row1 < row0 + row_rem; row1 += row1_rem) {
-                        row1_rem = (row0 + row_rem) - row1;
-                        if (row1_rem > MR) row1_rem = MR;
+                int row1_rem;
+                int row1;
+                for (row1 = row0; row1 < row0 + row_rem; row1 += row1_rem) {
+                    row1_rem = (row0 + row_rem) - row1;
+                    if (row1_rem > MR) row1_rem = MR;
 
-                        if (transa == 0)
-                            pack_a(row1_rem, k_rem, &A[row1 + k0 * lda], lda, sa);
-                        else
-                            pack_a(row1_rem, k_rem, &A[k0 + row1 * lda], lda, sa);
+                    if (transa == 0)
+                        pack_a(row1_rem, k_rem, &A[row1 + k0 * lda], lda, sa);
+                    else
+                        pack_a(row1_rem, k_rem, &A[k0 + row1 * lda], lda, sa);
+
+                    for (col1 = col0; col1 < col0 + col_rem; col1 += col1_rem) {
+                        col1_rem = (col0 + col_rem) - col1;
+                        if (col1_rem > NR) col1_rem = NR;
 
                         kernels->kernel(row1_rem, col1_rem, k_rem,
                                         alpha,

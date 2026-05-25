@@ -7,12 +7,19 @@
 # Test binaries
 test/test_gemm
 test/bench_gemm
+test/bench_compare
 
 # OpenBLAS reference (not our code)
 OpenBLAS/
 
 # Editor / IDE
+.cursor/
 .vscode/
 .idea/
+.kilocode/
+
 *.swp
 *~
+
+report.*
+draw-diagram*

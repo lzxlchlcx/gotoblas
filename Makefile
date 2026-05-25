@@ -3,6 +3,18 @@ CFLAGS  = -O2 -Wall -Isrc
 LDFLAGS = -lpthread
 AR      = ar
 
+UNAME_S := $(shell uname -s)
+IS_WSL  := $(shell uname -r | grep -qi microsoft && echo 1 || echo 0)
+
+# OpenBLAS defaults for macOS / WSL (can be overridden by env or command line)
+ifeq ($(UNAME_S),Darwin)
+  OPENBLAS_INC ?= /opt/homebrew/opt/openblas/include
+  OPENBLAS_LIB ?= /opt/homebrew/opt/openblas/lib
+else ifeq ($(IS_WSL),1)
+  OPENBLAS_INC ?= /usr/include/x86_64-linux-gnu
+  OPENBLAS_LIB ?= /usr/lib/x86_64-linux-gnu
+endif
+
 SRCS_API    = src/api/dgemm.c src/api/sgemm.c
 SRCS_DRIVER = src/driver/gemm_driver.c src/driver/gemm_thread.c
 SRCS_KERNEL_GENERIC = src/kernel/generic/dgemm_kernel.c \
@@ -74,9 +86,6 @@ $(TEST): test/test_gemm.c $(LIB)
 
 $(BENCH): test/bench_gemm.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
-
-OPENBLAS_INC = /home/lzx/miniconda3/envs/main/include
-OPENBLAS_LIB = /home/lzx/miniconda3/envs/main/lib
 
 $(COMPARE): test/bench_compare.c $(LIB)
 	$(CC) $(CFLAGS) -DMYBLAS_ENABLE_LOG -I$(OPENBLAS_INC) -o $@ $< -L. -L$(OPENBLAS_LIB) -lmyblas -lopenblas $(LDFLAGS) -lm
