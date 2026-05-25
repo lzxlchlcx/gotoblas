@@ -82,8 +82,8 @@ int main(void)
         printf("%10s  %12s  %12s  %6s\n",
                "", "(GFLOPS)", "(GFLOPS)", "");
 
-        myblas_log_reset();
         for (int i = 0; i < nsizes; i++) {
+            myblas_log_reset();
             int n = sizes[i];
             int niter = 5;
             if (n <= 128) niter = 20;
@@ -95,10 +95,10 @@ int main(void)
             double speedup = gflops_o / gflops_m;
 
             printf("%10d  %12.2f  %12.2f  %5.1fx\n",
-                   n, gflops_m, gflops_o, speedup);
-
+                n, gflops_m, gflops_o, speedup);
+                
+                myblas_log_print();
         }
-        myblas_log_print();
         printf("\n");
     }
 

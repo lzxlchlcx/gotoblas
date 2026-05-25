@@ -1,0 +1,202 @@
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/api/dgemm.o src/api/dgemm.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/api/sgemm.o src/api/sgemm.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/driver/gemm_driver.o src/driver/gemm_driver.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/driver/gemm_thread.o src/driver/gemm_thread.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/kernel/generic/dgemm_kernel.o src/kernel/generic/dgemm_kernel.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/kernel/generic/sgemm_kernel.o src/kernel/generic/sgemm_kernel.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/kernel/generic/dgemm_pack.o src/kernel/generic/dgemm_pack.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/kernel/generic/sgemm_pack.o src/kernel/generic/sgemm_pack.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/kernel/generic/dgemm_beta.o src/kernel/generic/dgemm_beta.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/kernel/generic/sgemm_beta.o src/kernel/generic/sgemm_beta.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/kernel/generic/kernel_init.o src/kernel/generic/kernel_init.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -c -o src/util/myblas_log.o src/util/myblas_log.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/dgemm_kernel.o src/kernel/avx2/dgemm_kernel.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/sgemm_kernel.o src/kernel/avx2/sgemm_kernel.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/dgemm_pack.o src/kernel/avx2/dgemm_pack.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/sgemm_pack.o src/kernel/avx2/sgemm_pack.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/dgemm_beta.o src/kernel/avx2/dgemm_beta.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/sgemm_beta.o src/kernel/avx2/sgemm_beta.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/kernel_init.o src/kernel/avx2/kernel_init.c
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -mavx2 -mfma -c -o src/kernel/avx2/cpuid.o src/kernel/avx2/cpuid.c
+ar rcs libmyblas.a src/api/dgemm.o src/api/sgemm.o src/driver/gemm_driver.o src/driver/gemm_thread.o src/kernel/generic/dgemm_kernel.o src/kernel/generic/sgemm_kernel.o src/kernel/generic/dgemm_pack.o src/kernel/generic/sgemm_pack.o src/kernel/generic/dgemm_beta.o src/kernel/generic/sgemm_beta.o src/kernel/generic/kernel_init.o src/util/myblas_log.o src/kernel/avx2/dgemm_kernel.o src/kernel/avx2/sgemm_kernel.o src/kernel/avx2/dgemm_pack.o src/kernel/avx2/sgemm_pack.o src/kernel/avx2/dgemm_beta.o src/kernel/avx2/sgemm_beta.o src/kernel/avx2/kernel_init.o src/kernel/avx2/cpuid.o
+gcc -O2 -Wall -Isrc -DMYBLAS_ENABLE_LOG -D__AVX2__ -DMYBLAS_ENABLE_LOG -I/home/lzx/miniconda3/envs/main/include -o test/bench_compare test/bench_compare.c -L. -L/home/lzx/miniconda3/envs/main/lib -lmyblas -lopenblas -lpthread -lm
+./test/bench_compare
+=== MyBLAS vs OpenBLAS Comparison ===
+CPU: Apple M5
+
+--- 1 thread(s) ---
+      Size        MyBLAS      OpenBLAS  Speedup
+                (GFLOPS)      (GFLOPS)        
+        64         17.67         38.69    2.2x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 20
+  Total:    0.001 s  (avg: 0.0000 s)
+  GFLOPS:   avg 19.3, peak 20.9
+  Last:     m=64 n=64 k=64 transa=N transb=N  16.4 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.000 s ( 38.5%)  1760 calls
+  pack_b:  0.000 s (  5.0%)  220 calls
+  kernel:  0.000 s ( 56.6%)  1760 calls
+===============================
+
+       128          7.26         59.12    8.1x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 20
+  Total:    0.012 s  (avg: 0.0006 s)
+  GFLOPS:   avg 22.7, peak 25.7
+  Last:     m=128 n=128 k=128 transa=N transb=N  24.6 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.009 s ( 84.0%)  7040 calls
+  pack_b:  0.000 s (  0.7%)  440 calls
+  kernel:  0.002 s ( 15.3%)  7040 calls
+===============================
+
+       256         13.30         63.25    4.8x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 10
+  Total:    0.025 s  (avg: 0.0025 s)
+  GFLOPS:   avg 19.8, peak 27.2
+  Last:     m=256 n=256 k=256 transa=N transb=N  25.5 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.009 s ( 37.2%)  13760 calls
+  pack_b:  0.000 s (  1.5%)  430 calls
+  kernel:  0.015 s ( 61.2%)  13760 calls
+===============================
+
+       512         31.04         81.45    2.6x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 5
+  Total:    0.043 s  (avg: 0.0086 s)
+  GFLOPS:   avg 31.4, peak 35.8
+  Last:     m=512 n=512 k=512 transa=N transb=N  35.5 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.019 s ( 47.2%)  55040 calls
+  pack_b:  0.001 s (  2.4%)  860 calls
+  kernel:  0.020 s ( 50.5%)  55040 calls
+===============================
+
+      1024         27.94         78.42    2.8x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 5
+  Total:    0.384 s  (avg: 0.0769 s)
+  GFLOPS:   avg 28.0, peak 29.0
+  Last:     m=1024 n=1024 k=1024 transa=N transb=N  29.0 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.186 s ( 51.1%)  437760 calls
+  pack_b:  0.006 s (  1.6%)  3420 calls
+  kernel:  0.172 s ( 47.3%)  437760 calls
+===============================
+
+      2048         26.34         79.34    3.0x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 3
+  Total:    1.957 s  (avg: 0.6523 s)
+  GFLOPS:   avg 26.3, peak 26.8
+  Last:     m=2048 n=2048 k=2048 transa=N transb=N  26.8 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  1.063 s ( 57.0%)  2101248 calls
+  pack_b:  0.017 s (  0.9%)  8208 calls
+  kernel:  0.786 s ( 42.1%)  2101248 calls
+===============================
+
+
+--- 4 thread(s) ---
+      Size        MyBLAS      OpenBLAS  Speedup
+                (GFLOPS)      (GFLOPS)        
+        64          4.47         61.42   13.7x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 20
+  Total:    0.002 s  (avg: 0.0001 s)
+  GFLOPS:   avg 4.9, peak 6.4
+  Last:     m=64 n=64 k=64 transa=N transb=N  5.9 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.000 s ( 20.8%)  1920 calls
+  pack_b:  0.000 s (  4.6%)  240 calls
+  kernel:  0.001 s ( 74.6%)  1918 calls
+===============================
+
+       128         25.45        167.36    6.6x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 20
+  Total:    0.003 s  (avg: 0.0002 s)
+  GFLOPS:   avg 26.2, peak 32.7
+  Last:     m=128 n=128 k=128 transa=N transb=N  24.6 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.001 s ( 32.8%)  7628 calls
+  pack_b:  0.000 s (  3.5%)  480 calls
+  kernel:  0.002 s ( 63.7%)  7596 calls
+===============================
+
+       256         64.02        225.14    3.5x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 10
+  Total:    0.005 s  (avg: 0.0005 s)
+  GFLOPS:   avg 64.7, peak 68.5
+  Last:     m=256 n=256 k=256 transa=N transb=N  68.2 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.004 s ( 29.2%)  14007 calls
+  pack_b:  0.000 s (  2.0%)  440 calls
+  kernel:  0.009 s ( 68.7%)  14009 calls
+===============================
+
+       512         98.08        273.78    2.8x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 5
+  Total:    0.014 s  (avg: 0.0027 s)
+  GFLOPS:   avg 99.3, peak 108.3
+  Last:     m=512 n=512 k=512 transa=N transb=N  80.2 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.017 s ( 42.9%)  56095 calls
+  pack_b:  0.001 s (  2.0%)  879 calls
+  kernel:  0.022 s ( 55.1%)  55977 calls
+===============================
+
+      1024         93.78        273.41    2.9x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 5
+  Total:    0.114 s  (avg: 0.0229 s)
+  GFLOPS:   avg 93.8, peak 97.4
+  Last:     m=1024 n=1024 k=1024 transa=N transb=N  93.8 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  0.177 s ( 47.7%)  438935 calls
+  pack_b:  0.008 s (  2.0%)  3439 calls
+  kernel:  0.186 s ( 50.3%)  436017 calls
+===============================
+
+      2048         96.77        283.28    2.9x
+
+=== MyBLAS Performance Log ===
+DGEMM calls: 3
+  Total:    0.533 s  (avg: 0.1775 s)
+  GFLOPS:   avg 96.8, peak 97.8
+  Last:     m=2048 n=2048 k=2048 transa=N transb=N  97.8 GFLOPS
+
+Driver breakdown (cumulative):
+  pack_a:  1.011 s ( 56.2%)  2106568 calls
+  pack_b:  0.018 s (  1.0%)  8255 calls
+  kernel:  0.770 s ( 42.8%)  2093707 calls
+===============================
+
+
