@@ -11,9 +11,12 @@ ifeq ($(UNAME_S),Darwin)
   OPENBLAS_INC ?= /opt/homebrew/opt/openblas/include
   OPENBLAS_LIB ?= /opt/homebrew/opt/openblas/lib
 else ifeq ($(IS_WSL),1)
-  OPENBLAS_INC ?= /usr/include/x86_64-linux-gnu
-  OPENBLAS_LIB ?= /usr/lib/x86_64-linux-gnu
+  OPENBLAS_INC ?= /home/lzx/miniconda3/envs/main/include
+  OPENBLAS_LIB ?= /home/lzx/miniconda3/envs/main/lib
 endif
+
+$(info OPENBLAS_INC=$(OPENBLAS_INC))
+$(info OPENBLAS_LIB=$(OPENBLAS_LIB))
 
 SRCS_API    = src/api/dgemm.c src/api/sgemm.c
 SRCS_DRIVER = src/driver/gemm_driver.c src/driver/gemm_thread.c
@@ -87,7 +90,8 @@ $(TEST): test/test_gemm.c $(LIB)
 $(BENCH): test/bench_gemm.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
 
-$(COMPARE): test/bench_compare.c $(LIB)
+$(COMPARE): test/bench_compare.c
+	make lib LOG=1
 	$(CC) $(CFLAGS) -DMYBLAS_ENABLE_LOG -I$(OPENBLAS_INC) -o $@ $< -L. -L$(OPENBLAS_LIB) -lmyblas -lopenblas $(LDFLAGS) -lm
 
 clean:
