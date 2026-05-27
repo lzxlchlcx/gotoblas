@@ -7,7 +7,7 @@
 | 记录时间 | 2026-05-25 23:35:23 +08:00 |
 | 当前分支 | main |
 | 当前版本 | 2f38072 |
-| 最近补充时间 | 2026-05-25 23:41:44 +08:00 |
+| 最近补充时间 | 2026-05-26 21:11:47 +08:00 |
 | 关联复盘 | `Docs/report/report2.md` |
 | 关联源码 | `src/kernel/avx2/dgemm_kernel.c` |
 
@@ -135,37 +135,194 @@ FMA c10/c11
 
 ## 4. 当前 8x6 kernel 的寄存器压力
 
-当前 `MR=8, NR=6` 的 accumulator 数量为：
+当前配置来自 `src/config/haswell.h`：
+
+```c
+#define GEMM_HASWELL_D_MR 8
+#define GEMM_HASWELL_D_NR 6
+```
+
+对应的 fast path 在 `src/kernel/avx2/dgemm_kernel.c` 中只在 `MR == 8 && NR == 6` 时启用。这个 kernel 的核心主循环结构是：
+
+```c
+for (p = 0; p < k; p++) {
+    __m256d a0 = _mm256_loadu_pd(&A[p * 8]);
+    __m256d a1 = _mm256_loadu_pd(&A[p * 8 + 4]);
+
+    __m256d b0 = _mm256_set1_pd(B[p + 0 * k]);
+    c00 = _mm256_fmadd_pd(a0, b0, c00);
+    c01 = _mm256_fmadd_pd(a1, b0, c01);
+
+    ...
+
+    __m256d b5 = _mm256_set1_pd(B[p + 5 * k]);
+    c50 = _mm256_fmadd_pd(a0, b5, c50);
+    c51 = _mm256_fmadd_pd(a1, b5, c51);
+}
+```
+
+### 4.1 accumulator 数量
+
+`MR=8, NR=6` 的 accumulator 数量为：
 
 ```text
 NR * ceil(MR / 4) = 6 * 2 = 12 个 YMM accumulator
 ```
 
-再加上：
+这 12 个 accumulator 在代码中明确对应：
+
+| C tile 列 | rows 0-3 | rows 4-7 |
+|-----------|----------|----------|
+| col 0 | `c00` | `c01` |
+| col 1 | `c10` | `c11` |
+| col 2 | `c20` | `c21` |
+| col 3 | `c30` | `c31` |
+| col 4 | `c40` | `c41` |
+| col 5 | `c50` | `c51` |
+
+这些 accumulator 的生命周期跨越整个 `p` loop。也就是说，从进入 `for (p = 0; p < k; p++)` 前清零开始，到 loop 结束后乘 `alpha` 和写回 `C` 之前，它们都必须保持 live。
+
+这是当前寄存器压力的核心原因：这 12 个 YMM 不能在主循环内部释放。
+
+### 4.2 主循环内部的临时寄存器
+
+每个 `p` 迭代还需要：
 
 ```text
-2 个 A vector
-1 个 alpha 或临时 broadcast
-1 个 C old / scratch
+2 个 A vector: a0, a1
+1 个 B broadcast: b0/b1/b2/b3/b4/b5 逐个复用
 ```
 
-总需求接近：
+因此主循环热路径的最小 YMM 需求是：
 
 ```text
-12 + 2 + 1 + 1 = 16 个 YMM
+12 accumulators + 2 A vectors + 1 B broadcast = 15 个 YMM
 ```
 
-AVX2 在 x86-64 下只有 16 个 YMM 寄存器。因此当前 kernel 已经非常接近寄存器上限。
+这只是主循环内的理想下限。x86-64 + AVX2 一共只有 `ymm0-ymm15` 共 16 个 YMM，因此主循环理论上只剩 1 个 YMM 余量。
 
-如果编译器在 unroll 后产生额外临时变量，可能发生：
+这个 1 个 YMM 余量通常要留给编译器做以下事情：
 
 ```text
-accumulator spill 到 stack
-循环中出现 vmovupd/vmovapd 读写 rsp/rbp 附近地址
-FMA 之间夹杂不必要的内存读写
+地址计算或 load/broadcast 形成的中间值
+编译器为了调度提前生成的下一个 broadcast
+循环展开后下一组 A load 或 B broadcast
+主循环和写回阶段之间的寄存器重命名/分配余量
 ```
 
-一旦 accumulator spill，DGEMM 性能会明显下降，因为原本应保存在寄存器中的热数据被迫反复读写内存。
+所以当前 `8x6` kernel 不是“刚好宽松”，而是“在不展开时勉强可放下”。
+
+### 4.3 `valpha` 和 C 写回阶段的压力
+
+代码在 loop 前生成：
+
+```c
+__m256d valpha = _mm256_set1_pd(alpha);
+```
+
+但 `valpha` 只在 `p` loop 结束后使用：
+
+```c
+c00 = _mm256_mul_pd(c00, valpha);
+...
+c51 = _mm256_mul_pd(c51, valpha);
+```
+
+理想情况下，编译器不应该让 `valpha` 在整个 `p` loop 中长期占用一个 YMM。更合理的做法是：
+
+```text
+主循环期间只保留 12 个 C accumulator、2 个 A vector、1 个 B broadcast
+loop 结束后再 broadcast alpha，或者从 GPR/栈重新生成 valpha
+```
+
+如果编译器把 `valpha` 也跨 loop 固定放在 YMM 中，主循环需求会变成：
+
+```text
+12 accumulators + 2 A vectors + 1 B broadcast + 1 valpha = 16 个 YMM
+```
+
+这会完全占满 AVX2 的 16 个 YMM，没有任何调度余量。
+
+C 写回阶段还需要一个 `t` 临时寄存器：
+
+```c
+__m256d t;
+t = _mm256_loadu_pd(&C[0 + 0 * ldc]);
+c00 = _mm256_add_pd(t, c00);
+_mm256_storeu_pd(&C[0 + 0 * ldc], c00);
+```
+
+不过 `t` 只在 loop 之后使用，不与 `a0/a1/bj` 的主循环临时变量重叠。因此它主要影响写回阶段，不是主循环 FMA throughput 的第一瓶颈。
+
+### 4.4 展开后的寄存器风险
+
+如果对 `p` loop 做 2x unroll，直觉上会想同时保留：
+
+```text
+当前 p 的 a0/a1 和 b broadcast
+下一 p 的 a0/a1 和 b broadcast
+同一组 12 个 accumulator
+```
+
+这会使寄存器需求很容易超过 16 个 YMM：
+
+```text
+12 accumulators + 4 A vectors + 1-2 B broadcasts = 17-18 个 YMM
+```
+
+因此 2x unroll 不能简单写成“同时保留两整组 A/B”。比较安全的方向是：
+
+```text
+保持 12 个 accumulator 常驻
+只提前 load 下一组 A，或只提前部分 B broadcast
+让 B broadcast 尽量短生命周期、逐列复用
+检查生成汇编是否出现 accumulator spill
+```
+
+4x unroll 的风险更高。如果没有手写汇编控制寄存器分配，编译器可能为了调度窗口生成更多 live temporary，导致 accumulator 被 spill。
+
+### 4.5 如何在汇编中识别寄存器不够
+
+AVX2 `8x6` 主循环里最不希望看到的是 accumulator spill。典型模式是：
+
+```text
+vmovupd %ymm?, -0x??(%rsp)
+vmovupd -0x??(%rsp), %ymm?
+vmovapd %ymm?, -0x??(%rsp)
+vmovapd -0x??(%rsp), %ymm?
+```
+
+需要注意，不是所有访问栈的 `vmov*` 都同样严重。判断重点是：
+
+| 栈访问位置 | 严重程度 | 说明 |
+|------------|----------|------|
+| 出现在 `p` loop 内部，夹在 `vfmadd*pd` 之间 | 高 | 很可能是 accumulator 或热临时变量 spill |
+| 出现在函数入口/出口 | 中 | 可能是 ABI、对齐或编译器保存临时状态 |
+| 出现在 loop 结束后的 alpha/C 写回阶段 | 低到中 | 影响写回，但通常不是主循环瓶颈 |
+
+一旦 accumulator 在 `p` loop 内 spill，DGEMM 性能会明显下降，因为原本应保存在寄存器中的热数据被迫反复读写内存。
+
+### 4.6 当前 8x6 的结论
+
+当前 `8x6` 形状的优点是 accumulator 数量足够多，可以帮助隐藏 FMA latency。缺点是寄存器使用已经贴近 AVX2 上限。
+
+总结为：
+
+| 项目 | 数量 | 生命周期 | 压力判断 |
+|------|------|----------|----------|
+| C accumulator | 12 YMM | 整个 `p` loop | 必须常驻，不能 spill |
+| A vector | 2 YMM | 每个 `p` 迭代 | 可复用，但最好提前 load |
+| B broadcast | 1 YMM | 每列 2 条 FMA | 应短生命周期复用 |
+| alpha vector | 0-1 YMM | loop 后才需要 | 不应长期占用主循环寄存器 |
+| C old/scratch | 1 YMM | loop 后写回 | 不影响主循环寄存器压力 |
+
+因此，当前 kernel 的关键不是“12 个 accumulator 是否太多”，而是：
+
+```text
+12 个 accumulator 是否能稳定常驻 YMM
+编译器是否避免让 valpha 或展开临时变量挤占主循环寄存器
+unroll 是否在提升调度窗口前先触发 spill
+```
 
 ---
 
@@ -187,6 +344,103 @@ FMA 之间夹杂不必要的内存读写
 
 当前 `8x6` 有 12 个 accumulator，理论上有助于隐藏 FMA latency。但是否能充分利用，还取决于 load/broadcast/FMA 的排列顺序。
 
+### 5.1 Raptor Lake P-core / Haswell 类 AVX2 的关键执行资源
+
+本项目机器是 i9-13900K。对当前 AVX2 DGEMM kernel，最关键的不是全部端口，而是 load、FMA、store/address 这些资源。可以用如下简化模型理解：
+
+| 资源 | 典型数量 | 对应操作 | 对 kernel 的意义 |
+|------|----------|----------|------------------|
+| 256-bit FMA pipeline | 2 条 | `vfmadd*pd` | 理想每周期 2 条 256-bit FMA |
+| load pipeline / load port | 2 条 | `vmovupd` load、内存源 `vbroadcastsd` | 理想每周期最多 2 个 load 类 uop |
+| store data pipeline | 1 条 | `vmovupd` store | 主要影响 C 写回阶段 |
+| store address / AGU | 1 条以上 | store 地址生成 | 写回阶段和复杂地址会受影响 |
+| load AGU | 2 条左右 | load 地址生成 | A load 与 B broadcast 都需要地址生成 |
+
+这里说的“2 个 loader”更准确地说是：核心通常能在一个周期内处理两个 load 类内存操作，且 L1D 到寄存器的带宽可支持两个 256-bit load 的量级。不同资料会按“load port”“load AGU”“L1D bandwidth”分别描述，但对当前 kernel 的实践含义一致：A load 和 B broadcast 会争用 load 侧资源。
+
+### 5.2 关键指令的吞吐和 latency
+
+不同 Intel 微架构的精确数字会有差异，应以 Intel Intrinsics Guide、Agner Fog、uops.info 和实测为准。用于当前分析时，可以采用以下近似：
+
+| 指令/操作 | 吞吐上限 | 典型 latency | 说明 |
+|-----------|----------|--------------|------|
+| `vfmadd*pd ymm, ymm, ymm` | 2 条/cycle | 约 4 cycles | 依赖链上的 accumulator 约 4 cycle 后可再次使用 |
+| `vmulpd ymm` / `vaddpd ymm` | 通常 1-2 条/cycle | 约 3-4 cycles | loop 后 alpha/C 写回使用，不是主循环主体 |
+| `vmovupd ymm, [mem]` 256-bit load | 最多 2 条/cycle | L1 命中约 4-5 cycles | `a0/a1` load 使用 |
+| `vbroadcastsd ymm, [mem]` | load 侧通常最多约 1-2 条/cycle | L1 命中约 5 cycles 量级 | B 标量 load + broadcast，既占 load 资源也占 shuffle/broadcast 资源 |
+| `vmovupd [mem], ymm` 256-bit store | 通常 1 条/cycle | store buffer 异步吸收 | C 写回阶段使用 |
+
+对主循环最重要的是 `vfmadd*pd` 的 latency。若 FMA latency 约为 4 cycles，而核心最多每周期发射 2 条 FMA，那么为了完全隐藏 latency，粗略需要：
+
+```text
+2 FMA/cycle * 4 cycles = 8 条 independent accumulator 链
+```
+
+当前 `8x6` 有 12 条 independent accumulator 链，因此从 FMA latency 隐藏角度看是足够的。
+
+但这不等于一定能跑满 FMA pipeline，因为每个 `p` 迭代还必须提供 A/B 数据，并完成地址更新和循环控制。
+
+### 5.3 当前 8x6 每个 p 迭代的理论周期下界
+
+当前每个 `p` 迭代执行：
+
+```text
+2 条 256-bit A load
+6 条 B scalar broadcast
+12 条 256-bit FMA
+```
+
+只看 FMA pipeline：
+
+```text
+12 FMA / 2 FMA per cycle = 6 cycles
+```
+
+只看 load 类操作，粗略有：
+
+```text
+2 A load + 6 B broadcast = 8 load-like operations
+8 / 2 load ports = 4 cycles
+```
+
+所以在理想情况下，主循环更可能先受 FMA throughput 限制，理论下界约为 6 cycles / p。每个 `p` 迭代完成的浮点工作量是：
+
+```text
+8 * 6 multiply-add = 48 FMA scalar operations
+48 * 2 FLOPs = 96 FLOPs
+```
+
+如果 6 cycles 完成，则刚好对应：
+
+```text
+96 FLOPs / 6 cycles = 16 FLOPs/cycle
+```
+
+这就是 2 条 256-bit FMA pipeline 的 AVX2 double 理论峰值。
+
+### 5.4 为什么 latency 仍然会影响实际表现
+
+虽然 12 个 accumulator 多于隐藏 FMA latency 所需的约 8 条链，但实际还有几个问题：
+
+| 问题 | 影响 |
+|------|------|
+| B broadcast latency | `bj` 生成后才能执行对应的两条 FMA |
+| A load latency | `a0/a1` load 太晚会让第一组 FMA 等待 |
+| FMA 排列 | 如果过早回到同一个 accumulator，会暴露 FMA latency |
+| 地址计算 | `B[p + j * k]` 的 6 路地址可能增加整数/AGU 压力 |
+| 寄存器压力 | 为提前 load/broadcast 增加临时寄存器，可能诱发 spill |
+
+因此较好的指令调度目标是：
+
+```text
+尽早 load a0/a1
+每次 broadcast 一个 bj 后，连续消费到 c?0/c?1 两个 accumulator
+在 FMA 序列中穿插后续 broadcast 或下一 p 的 A load
+避免为了提前太多 load/broadcast 而增加 live YMM 数量
+```
+
+这也是当前阶段建议先检查编译器生成汇编的原因：如果编译器已经把 load/broadcast/FMA 穿插得足够好，手写汇编收益会变小；如果它把 broadcast 集中在一起、FMA 排列差、或者出现 spill，手写汇编或更精细的 intrinsics 改写才有明确依据。
+
 ---
 
 ## 6. 必要知识：load/broadcast 压力
@@ -201,6 +455,8 @@ FMA: 12 条
 
 如果只看 FMA，12 条 FMA 在理想情况下约 6 cycles 可以发射完，因为每周期最多 2 条 FMA。
 
+如果只看 load/broadcast，2 条 A load 加 6 条 B broadcast 是 8 个 load-like 操作。在 L1 命中且地址生成不拖后腿时，2 个 load port 给出的粗略下界约为 4 cycles。因此当前 `8x6` 的理想主循环下界主要由 FMA 侧的 6 cycles 决定，而不是 load 侧的 4 cycles。
+
 但实际循环还要承受：
 
 ```text
@@ -211,6 +467,55 @@ loop branch 开销
 ```
 
 因此 kernel 是否接近峰值，不只取决于 FMA 数量，也取决于能否把 load、broadcast 和 FMA 合理穿插。
+
+更具体地说，当前 `8x6` 的 load/broadcast 压力有三个特点：
+
+| 特点 | 说明 | 优化含义 |
+|------|------|----------|
+| A 是连续 packed load | `A[p * 8]` 和 `A[p * 8 + 4]` 是连续 64B | 对 L1 友好，适合提前 load |
+| B 是 6 条 stride-k 标量 load | `B[p + j * k]`，j=0..5 | 依赖 B packing 后的布局和 cache 命中 |
+| 每个 B broadcast 被两条 FMA 消费 | 一个 `bj` 同时用于 `a0` 和 `a1` | broadcast 生命周期可很短，不必保留多个 `bj` |
+
+理想调度不应该一次性保留 `b0..b5` 六个 broadcast。那样会把寄存器需求从 15 个 YMM 推高到：
+
+```text
+12 accumulators + 2 A vectors + 6 B broadcasts = 20 个 YMM
+```
+
+这在 AVX2 下必然无法容纳。当前 C intrinsics 写法逐个声明并消费 `b0..b5`，从源码意图上是希望编译器复用同一个 broadcast 寄存器。但最终是否真的复用，仍需要看生成汇编确认。
+
+### 6.1 对 2x unroll 的直接影响
+
+2x unroll 的收益来自：
+
+```text
+减少 loop branch 和地址更新占比
+扩大编译器调度窗口
+让下一 p 的 A load 或 B broadcast 更早发出
+```
+
+但它也会增加 load/broadcast 的瞬时压力。2 个 `p` 迭代合计有：
+
+```text
+4 条 A load
+12 条 B broadcast
+24 条 FMA
+```
+
+吞吐下界仍然近似是：
+
+```text
+24 FMA / 2 = 12 cycles
+16 load-like ops / 2 = 8 cycles
+```
+
+从纯吞吐看，2x unroll 仍是 FMA-bound。但如果 unroll 导致多个 A/B 临时值同时 live，寄存器压力会先变成问题。因此 2x unroll 的正确验证顺序是：
+
+```text
+先看汇编是否 spill
+再看 FMA 是否更连续
+最后看 benchmark 是否提升
+```
 
 ---
 

@@ -44,37 +44,37 @@ static int dgemm_kernel_fast(int m, int n, int k,
     __m256d c50 = _mm256_setzero_pd();
     __m256d c51 = _mm256_setzero_pd();
 
-    __m256d valpha = _mm256_set1_pd(alpha);
-
     int p;
     for (p = 0; p < k; p++) {
         __m256d a0 = _mm256_loadu_pd(&A[p * 8]);
         __m256d a1 = _mm256_loadu_pd(&A[p * 8 + 4]);
 
-        __m256d b0 = _mm256_set1_pd(B[p + 0 * k]);
-        c00 = _mm256_fmadd_pd(a0, b0, c00);
-        c01 = _mm256_fmadd_pd(a1, b0, c01);
+        __m256d b = _mm256_set1_pd(B[p + 0 * k]);
+        c00 = _mm256_fmadd_pd(a0, b, c00);
+        c01 = _mm256_fmadd_pd(a1, b, c01);
 
-        __m256d b1 = _mm256_set1_pd(B[p + 1 * k]);
-        c10 = _mm256_fmadd_pd(a0, b1, c10);
-        c11 = _mm256_fmadd_pd(a1, b1, c11);
+        b = _mm256_set1_pd(B[p + 1 * k]);
+        c10 = _mm256_fmadd_pd(a0, b, c10);
+        c11 = _mm256_fmadd_pd(a1, b, c11);
 
-        __m256d b2 = _mm256_set1_pd(B[p + 2 * k]);
-        c20 = _mm256_fmadd_pd(a0, b2, c20);
-        c21 = _mm256_fmadd_pd(a1, b2, c21);
+        b = _mm256_set1_pd(B[p + 2 * k]);
+        c20 = _mm256_fmadd_pd(a0, b, c20);
+        c21 = _mm256_fmadd_pd(a1, b, c21);
 
-        __m256d b3 = _mm256_set1_pd(B[p + 3 * k]);
-        c30 = _mm256_fmadd_pd(a0, b3, c30);
-        c31 = _mm256_fmadd_pd(a1, b3, c31);
+        b = _mm256_set1_pd(B[p + 3 * k]);
+        c30 = _mm256_fmadd_pd(a0, b, c30);
+        c31 = _mm256_fmadd_pd(a1, b, c31);
 
-        __m256d b4 = _mm256_set1_pd(B[p + 4 * k]);
-        c40 = _mm256_fmadd_pd(a0, b4, c40);
-        c41 = _mm256_fmadd_pd(a1, b4, c41);
+        b = _mm256_set1_pd(B[p + 4 * k]);
+        c40 = _mm256_fmadd_pd(a0, b, c40);
+        c41 = _mm256_fmadd_pd(a1, b, c41);
 
-        __m256d b5 = _mm256_set1_pd(B[p + 5 * k]);
-        c50 = _mm256_fmadd_pd(a0, b5, c50);
-        c51 = _mm256_fmadd_pd(a1, b5, c51);
+        b = _mm256_set1_pd(B[p + 5 * k]);
+        c50 = _mm256_fmadd_pd(a0, b, c50);
+        c51 = _mm256_fmadd_pd(a1, b, c51);
     }
+
+    __m256d valpha = _mm256_set1_pd(alpha);
 
     c00 = _mm256_mul_pd(c00, valpha);
     c01 = _mm256_mul_pd(c01, valpha);
