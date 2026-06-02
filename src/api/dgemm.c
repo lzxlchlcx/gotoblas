@@ -6,6 +6,10 @@
 #include "config/generic.h"
 #include "util/myblas_log.h"
 
+#ifdef USE_CUDA
+#include "kernel/cuda/gemm_gpu.h"
+#endif
+
 #ifdef __AVX2__
 #include "config/haswell.h"
 extern int cpu_supports_avx2(void);
@@ -62,6 +66,16 @@ void my_dgemm(char transa, char transb,
     }
 
     MYBLAS_LOG_TIMER_START(log_t0);
+
+#ifdef USE_CUDA
+    if (gpu_should_dispatch(m, n, k, 0) && gpu_dispatch_init() == 0) {
+        if (gpu_dgemm(gpu_dispatch_handle(), transa, transb, m, n, k,
+                      alpha, A, lda, B, ldb, beta, C, ldc) == 0) {
+            MYBLAS_LOG_RECORD_CALL_ELAPSED(m, n, k, ta, tb, log_t0);
+            return;
+        }
+    }
+#endif
 
     gemm_config_t cfg;
     const gemm_kernel_table_t *kernels;

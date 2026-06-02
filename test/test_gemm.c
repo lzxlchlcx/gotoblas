@@ -65,7 +65,7 @@ static int compare_d(const double *C_ref, const double *C, int m, int n, int ldc
             double diff = fabs(C_ref[i + j * ldc] - C[i + j * ldc]);
             double denom = fabs(C_ref[i + j * ldc]);
             if (denom < 1e-15) denom = 1.0;
-            if (diff / denom > eps) {
+            if (diff > eps && diff / denom > eps) {
                 printf("  FAIL at (%d,%d): ref=%e, got=%e, rel_err=%e\n",
                        i, j, C_ref[i + j * ldc], C[i + j * ldc], diff / denom);
                 return -1;
@@ -82,7 +82,7 @@ static int compare_s(const float *C_ref, const float *C, int m, int n, int ldc, 
             float diff = fabsf(C_ref[i + j * ldc] - C[i + j * ldc]);
             float denom = fabsf(C_ref[i + j * ldc]);
             if (denom < 1e-7f) denom = 1.0f;
-            if (diff / denom > eps) {
+            if (diff > eps && diff / denom > eps) {
                 printf("  FAIL at (%d,%d): ref=%e, got=%e, rel_err=%e\n",
                        i, j, C_ref[i + j * ldc], C[i + j * ldc], diff / denom);
                 return -1;

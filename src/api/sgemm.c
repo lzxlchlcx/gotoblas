@@ -5,6 +5,10 @@
 #include "driver/gemm_internal.h"
 #include "config/generic.h"
 
+#ifdef USE_CUDA
+#include "kernel/cuda/gemm_gpu.h"
+#endif
+
 #ifdef __AVX2__
 #include "config/haswell.h"
 extern int cpu_supports_avx2(void);
@@ -59,6 +63,15 @@ void my_sgemm(char transa, char transb,
         }
         return;
     }
+
+#ifdef USE_CUDA
+    if (gpu_should_dispatch(m, n, k, 1) && gpu_dispatch_init() == 0) {
+        if (gpu_sgemm(gpu_dispatch_handle(), transa, transb, m, n, k,
+                      alpha, A, lda, B, ldb, beta, C, ldc) == 0) {
+            return;
+        }
+    }
+#endif
 
     gemm_config_t cfg;
     const sgemm_kernel_table_t *kernels;

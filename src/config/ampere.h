@@ -1,0 +1,23 @@
+#ifndef MYBLAS_CONFIG_AMPERE_H
+#define MYBLAS_CONFIG_AMPERE_H
+
+#define GPU_DGEMM_TILE_M    128
+#define GPU_DGEMM_TILE_N    128
+#define GPU_DGEMM_TILE_K    8
+#define GPU_DGEMM_THREAD_M  8
+#define GPU_DGEMM_THREAD_N  8
+
+#define GPU_SGEMM_TILE_M    128
+#define GPU_SGEMM_TILE_N    128
+#define GPU_SGEMM_TILE_K    16
+#define GPU_SGEMM_THREAD_M  8
+#define GPU_SGEMM_THREAD_N  8
+
+#define GPU_DGEMM_DISPATCH_MIN 512
+#define GPU_SGEMM_DISPATCH_MIN 256
+
+#define GPU_SGEMM_TC_TILE_M    128
+#define GPU_SGEMM_TC_TILE_N    128
+#define GPU_SGEMM_TC_TILE_K    32
+
+#endif

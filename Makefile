@@ -2,6 +2,8 @@ CC      = gcc
 CFLAGS  = -O2 -Wall -Isrc
 LDFLAGS = -lpthread
 AR      = ar
+NVCC    ?= nvcc
+CUDA_FLAGS ?= -O2 -arch=sm_86 -Isrc
 
 UNAME_S := $(shell uname -s)
 IS_WSL  := $(shell uname -r | grep -qi microsoft && echo 1 || echo 0)
@@ -18,7 +20,7 @@ endif
 $(info OPENBLAS_INC=$(OPENBLAS_INC))
 $(info OPENBLAS_LIB=$(OPENBLAS_LIB))
 
-SRCS_API    = src/api/dgemm.c src/api/sgemm.c
+SRCS_API    = src/api/dgemm.c src/api/sgemm.c src/api/gemm_gpu_dispatch.c
 SRCS_DRIVER = src/driver/gemm_driver.c src/driver/gemm_thread.c
 SRCS_KERNEL_GENERIC = src/kernel/generic/dgemm_kernel.c \
               src/kernel/generic/sgemm_kernel.c \
@@ -42,6 +44,20 @@ SRCS = $(SRCS_API) $(SRCS_DRIVER) $(SRCS_KERNEL_GENERIC)
 SRCS_UTIL = src/util/myblas_log.c
 OBJS = $(SRCS:.c=.o) $(SRCS_UTIL:.c=.o)
 
+HAS_NVCC := $(shell command -v $(NVCC) >/dev/null 2>&1 && echo yes || echo no)
+USE_CUDA ?= $(if $(filter yes,$(HAS_NVCC)),1,0)
+
+SRCS_CUDA = src/kernel/cuda/gpu_init.cu \
+            src/kernel/cuda/dgemm_kernel.cu \
+            src/kernel/cuda/sgemm_kernel.cu
+
+ifeq ($(USE_CUDA),1)
+  CUDA_HOME ?= /usr/local/cuda
+  CFLAGS += -DUSE_CUDA -I$(CUDA_HOME)/include
+  OBJS += $(SRCS_CUDA:.cu=.o)
+  LDFLAGS += -lcudart -lcublas -L$(CUDA_HOME)/lib64
+endif
+
 ifdef LOG
   CFLAGS += -DMYBLAS_ENABLE_LOG
 endif
@@ -58,8 +74,10 @@ LIB     = libmyblas.a
 TEST    = test/test_gemm
 BENCH   = test/bench_gemm
 COMPARE = test/bench_compare
+TEST_GPU = test/test_gemm_gpu
+BENCH_GPU = test/bench_gemm_gpu
 
-.PHONY: all lib test bench clean
+.PHONY: all lib test bench test_gpu bench_gpu clean
 
 all: lib
 
@@ -70,6 +88,9 @@ $(LIB): $(OBJS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+%.o: %.cu
+	$(NVCC) $(CUDA_FLAGS) -c -o $@ $<
 
 # AVX2 objects need -mavx2 -mfma flags
 src/kernel/avx2/%.o: src/kernel/avx2/%.c
@@ -84,6 +105,12 @@ bench: $(BENCH)
 compare: $(COMPARE)
 	./$(COMPARE)
 
+test_gpu: $(TEST_GPU)
+	./$(TEST_GPU)
+
+bench_gpu: $(BENCH_GPU)
+	./$(BENCH_GPU)
+
 $(TEST): test/test_gemm.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
 
@@ -94,5 +121,11 @@ $(COMPARE): test/bench_compare.c
 	make lib LOG=1
 	$(CC) $(CFLAGS) -DMYBLAS_ENABLE_LOG -I$(OPENBLAS_INC) -o $@ $< -L. -L$(OPENBLAS_LIB) -lmyblas -lopenblas $(LDFLAGS) -lm
 
+$(TEST_GPU): test/test_gemm_gpu.c $(LIB)
+	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
+
+$(BENCH_GPU): test/bench_gemm_gpu.c $(LIB)
+	$(CC) $(CFLAGS) -o $@ $< -L. -lmyblas $(LDFLAGS) -lm
+
 clean:
-	rm -f $(OBJS) $(SRCS_AVX2:.c=.o) $(LIB) $(TEST) $(BENCH) $(COMPARE)
+	rm -f $(OBJS) $(SRCS_AVX2:.c=.o) $(SRCS_CUDA:.cu=.o) $(LIB) $(TEST) $(BENCH) $(COMPARE) $(TEST_GPU) $(BENCH_GPU)
