@@ -17,6 +17,7 @@ OpenBLAS/
 .vscode/
 .idea/
 .kilocode/
+.kilo/
 
 *.swp
 *~
